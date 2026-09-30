@@ -1,11 +1,10 @@
 """
 Kannada Gothila daily poster.
-1. Asks Claude for a fresh Bangalore joke (avoids repeats via history.json)
+1. Picks the next unused joke from jokes.json (tracked in history.json)
 2. Renders it as a 1080x1350 card with Pillow
 3. Publishes to Instagram via the Graph API
 
 Env vars:
-  ANTHROPIC_API_KEY   Claude API key
   IG_USER_ID          Instagram professional account ID
   IG_ACCESS_TOKEN     Long lived access token
   IG_API_HOST         graph.facebook.com (FB login) or graph.instagram.com (IG login)
@@ -21,54 +20,23 @@ HISTORY = ROOT / "history.json"
 IMG_DIR = ROOT / "images"
 IMG_DIR.mkdir(exist_ok=True)
 
-THEMES = [
-    "Silk Board junction traffic", "Outer Ring Road commute", "auto drivers and meter negotiations",
-    "rent and deposits (10 months advance)", "Bangalore weather mood swings", "sudden evening rain and flooded roads",
-    "startup and tech culture", "filter coffee and darshini breakfast", "Namma Metro", "potholes",
-    "house hunting and brokers", "Koramangala vs Indiranagar vs HSR", "weekend plans that die in traffic",
-    "Ola/Uber/Rapido surge", "water tankers", "pub culture and last call timings", "BMTC buses",
-    "moving to Bangalore for the first time", "learning a few Kannada words", "Nandi Hills sunrise plans",
-]
-
-SYSTEM = """You write for 'Kannada Gothila', a light-hearted Instagram meme account about everyday life in Bangalore.
-Tone: witty, relatable, affectionate toward the city. Punch at situations (traffic, rent, weather, commutes, startups),
-never at any community, language group, migrants, locals, religion, gender, or real named individuals.
-Kannada words are welcome when they add flavour (e.g. 'swalpa adjust maadi', 'guru', 'sakkath'), used warmly.
-Keep it clean and brand safe."""
-
-PROMPT = """Theme for today: {theme}
-
-Jokes already posted (do not repeat or closely rephrase):
-{history}
-
-Return ONLY JSON with keys:
-"setup": a short line, max 14 words
-"punchline": max 16 words
-"caption": 1 to 2 fun sentences for the Instagram caption, no hashtags
-"hashtags": list of 6 to 10 hashtags without the # symbol"""
-
-
 def load_history():
     return json.loads(HISTORY.read_text()) if HISTORY.exists() else []
 
 
+HASHTAGS = ["bangalore", "bengaluru", "nammabengaluru", "bangalorememes", "bangaloretraffic",
+            "kannada", "bengalurudiaries", "bangalorelife", "kannadagothila"]
+
+
 def generate(history):
-    theme = random.choice(THEMES)
-    recent = "\n".join(f"- {h['setup']} / {h['punchline']}" for h in history[-60:]) or "(none yet)"
-    r = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={"x-api-key": os.environ["ANTHROPIC_API_KEY"],
-                 "anthropic-version": "2023-06-01", "content-type": "application/json"},
-        json={"model": os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5"), "max_tokens": 600,
-              "system": SYSTEM,
-              "messages": [{"role": "user", "content": PROMPT.format(theme=theme, history=recent)}]},
-        timeout=60,
-    )
-    r.raise_for_status()
-    text = r.json()["content"][0]["text"]
-    data = json.loads(re.search(r"\{.*\}", text, re.S).group(0))
-    data["theme"] = theme
-    return data
+    jokes = json.loads((ROOT / "jokes.json").read_text())
+    used = {h["setup"] for h in history}
+    remaining = [j for j in jokes if j["setup"] not in used]
+    if not remaining:
+        sys.exit("All jokes used. Add more to jokes.json.")
+    joke = dict(remaining[0])
+    joke["hashtags"] = HASHTAGS
+    return joke
 
 
 def font(size, bold=True):
