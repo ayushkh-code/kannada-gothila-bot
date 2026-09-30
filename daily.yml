@@ -1,0 +1,47 @@
+name: Daily Kannada Gothila post
+
+on:
+  schedule:
+    - cron: "30 13 * * *"   # 7:00 PM IST daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: sudo apt-get install -y fonts-dejavu-core && pip install -r requirements.txt
+
+      - name: Generate joke and render card
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          STAGE: render
+        run: python post.py
+
+      - name: Push image so it has a public URL
+        run: |
+          git config user.name "gothila-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add images pending.json
+          git commit -m "Render $(date +%F)"
+          git push
+          sleep 20
+
+      - name: Publish to Instagram
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_API_HOST: ${{ vars.IG_API_HOST || 'graph.facebook.com' }}
+          IMAGE_BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}
+        run: python post.py --publish
+
+      - name: Save history
+        run: |
+          git add -A
+          git commit -m "Posted $(date +%F)"
+          git push
