@@ -19,7 +19,6 @@ jobs:
 
       - name: Generate joke and render card
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           STAGE: render
         run: python post.py
 
